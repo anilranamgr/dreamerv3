@@ -114,6 +114,20 @@ def train(make_agent, make_replay, make_env, make_logger, args):
 
     if should_log(step):
       logger.add(agg.result())
+
+      # Check if 'policy_image' exists in epstats.result() before accessing it
+      epstats_result = epstats.result()  # Store the result once to avoid recalculating
+      if 'policy_image' in epstats_result:
+          image_data = epstats_result['policy_image']
+          print(f"policy_image shape: {image_data.shape}")
+          if image_data.shape[-1] in {1, 3, 4}:  # Only log valid image shapes
+              logger.add(epstats_result, prefix='epstats')
+          else:
+              print("Invalid image shape for policy_image, skipping logging.")
+      else:
+          # If 'policy_image' is not present, log epstats without it
+          logger.add(epstats_result, prefix='epstats')
+      logger.add(agg.result())
       logger.add(epstats.result(), prefix='epstats')
       logger.add(embodied.timer.stats(), prefix='timer')
       logger.add(replay.stats(), prefix='replay')

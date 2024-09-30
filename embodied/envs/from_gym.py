@@ -1,7 +1,7 @@
 import functools
 
 import embodied
-import gym
+import gymnasium as gym #old gym is now gymnasium
 import numpy as np
 
 
@@ -55,31 +55,54 @@ class FromGym(embodied.Env):
 
   def step(self, action):
     if action['reset'] or self._done:
-      self._done = False
-      obs = self._env.reset()
-      return self._obs(obs, 0.0, is_first=True)
+        self._done = False
+        obs = self._env.reset()
+        return self._obs(obs, 0.0, is_first=True)
+
     if self._act_dict:
-      action = self._unflatten(action)
+        action = self._unflatten(action)
     else:
-      action = action[self._act_key]
-    obs, reward, self._done, self._info = self._env.step(action)
+        action = action[self._act_key]
+
+    # Unpack the five returned values
+    obs, reward, self._done, truncated, self._info = self._env.step(action)
+
+    # Handle the episode termination based on either `done` or `truncated`
+    is_terminal = bool(self._info.get('is_terminal', self._done)) or truncated
+
     return self._obs(
         obs, reward,
         is_last=bool(self._done),
-        is_terminal=bool(self._info.get('is_terminal', self._done)))
+        is_terminal=is_terminal)
 
-  def _obs(
-      self, obs, reward, is_first=False, is_last=False, is_terminal=False):
+
+  def _obs(self, obs, reward, is_first=False, is_last=False, is_terminal=False):
+    # Separate observation and info if it's a tuple
+    if isinstance(obs, tuple):
+        obs, info = obs  # Unpack the observation array and the metadata
+        #print(f"Metadata Info: {info}")  # Optionally print the metadata
+
+    #print(f"Original Observation from Environment: {obs}")
+
     if not self._obs_dict:
-      obs = {self._obs_key: obs}
-    obs = self._flatten(obs)
-    obs = {k: np.asarray(v) for k, v in obs.items()}
+        obs = {self._obs_key: obs}  # Only process the observation array (5x5 matrix)
+
+    obs = self._flatten(obs)  # Flatten any complex structures
+    obs = {k: np.asarray(v) for k, v in obs.items()}  # Convert to NumPy arrays
+
+    # Adding debug prints to check observation structure
+    #print(f"Flattened and Processed Observation: {obs}")
+
     obs.update(
         reward=np.float32(reward),
         is_first=is_first,
         is_last=is_last,
-        is_terminal=is_terminal)
+        is_terminal=is_terminal
+    )
+
+    #print(f"Final Observation Passed to DreamerV3: {obs}")
     return obs
+
 
   def render(self):
     image = self._env.render('rgb_array')

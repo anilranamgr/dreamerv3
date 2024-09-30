@@ -270,55 +270,74 @@ class DiscretizeAction(base.Wrapper):
 
 class ResizeImage(base.Wrapper):
 
-  def __init__(self, env, size=(64, 64)):
-    super().__init__(env)
-    self._size = size
-    self._keys = [
-        k for k, v in env.obs_space.items()
-        if len(v.shape) > 1 and v.shape[:2] != size]
-    print(f'Resizing keys {",".join(self._keys)} to {self._size}.')
-    if self._keys:
-      from PIL import Image
-      self._Image = Image
+    def __init__(self, env, size=(64, 64)):
+        super().__init__(env)
+        self._size = size
+        self._keys = [
+            k for k, v in env.obs_space.items()
+            if len(v.shape) > 1 and v.shape[:2] != size]
+        print(f'Resizing keys {",".join(self._keys)} to {self._size}.')
+        if self._keys:
+            from PIL import Image
+            self._Image = Image
 
-  @functools.cached_property
-  def obs_space(self):
-    spaces = self.env.obs_space
-    for key in self._keys:
-      shape = self._size + spaces[key].shape[2:]
-      spaces[key] = spacelib.Space(np.uint8, shape)
-    return spaces
+    @functools.cached_property
+    def obs_space(self):
+        spaces = self.env.obs_space
+        for key in self._keys:
+            shape = self._size + spaces[key].shape[2:]
+            spaces[key] = spacelib.Space(np.uint8, shape)
+        return spaces
 
-  def step(self, action):
-    obs = self.env.step(action)
-    for key in self._keys:
-      obs[key] = self._resize(obs[key])
-    return obs
+    def step(self, action):
+        obs = self.env.step(action)
+        for key in self._keys:
+            print(f"Original Image Shape for {key}: {obs[key].shape}")
+            obs[key] = self._resize(obs[key])
+            print(f"Resized Image Shape for {key}: {obs[key].shape}")
+            
+            # Check and fix if the image has more than 4 channels
+            if obs[key].shape[-1] > 4:
+                print(f"Reducing channels for {key}: {obs[key].shape}")
+                obs[key] = obs[key][..., :3]  # Take only the first 3 channels (for RGB)
+                print(f"Adjusted Image Shape for {key}: {obs[key].shape}")
+        return obs
 
-  def _resize(self, image):
-    image = self._Image.fromarray(image)
-    image = image.resize(self._size, self._Image.NEAREST)
-    image = np.array(image)
-    return image
+    def _resize(self, image):
+        image = self._Image.fromarray(image)
+        image = image.resize(self._size, self._Image.NEAREST)
+        image = np.array(image)
+        return image
 
 
 class RenderImage(base.Wrapper):
 
-  def __init__(self, env, key='image'):
-    super().__init__(env)
-    self._key = key
-    self._shape = self.env.render().shape
+    def __init__(self, env, key='image'):
+        super().__init__(env)
+        self._key = key
+        self._shape = self.env.render().shape
 
-  @functools.cached_property
-  def obs_space(self):
-    spaces = self.env.obs_space
-    spaces[self._key] = spacelib.Space(np.uint8, self._shape)
-    return spaces
+    @functools.cached_property
+    def obs_space(self):
+        spaces = self.env.obs_space
+        spaces[self._key] = spacelib.Space(np.uint8, self._shape)
+        return spaces
 
-  def step(self, action):
-    obs = self.env.step(action)
-    obs[self._key] = self.env.render()
-    return obs
+    def step(self, action):
+        obs = self.env.step(action)
+        rendered_image = self.env.render()
+        
+        # Print the shape of the rendered image
+        print(f"Rendered Image Shape: {rendered_image.shape}")
+        
+        # Check and fix if the image has more than 4 channels
+        if rendered_image.shape[-1] > 4:
+            print(f"Reducing channels for rendered image: {rendered_image.shape}")
+            rendered_image = rendered_image[..., :3]  # Take only the first 3 channels (for RGB)
+            print(f"Adjusted Rendered Image Shape: {rendered_image.shape}")
+        
+        obs[self._key] = rendered_image
+        return obs
 
 
 class BackwardReturn(base.Wrapper):
